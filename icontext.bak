@@ -1,0 +1,748 @@
+#!/usr/bin/env python3
+"""
+iContext.1 — Diagnóstico universal de proyectos.
+Sin IA. Sin APIs. Sin modificar el proyecto.
+Evidencia real → contexto → continuidad → problemas → rumbo → siguiente acción.
+"""
+
+import os
+import re
+import subprocess
+import json
+from pathlib import Path
+from datetime import datetime
+
+ROOT = Path.cwd().resolve()
+HOME = Path.home()
+
+# ─── CONFIGURACIÓN ──────────────────────────────────────────────────────
+CONFIG_FILE = HOME / ".iContext" / "config.json"
+MEMORY_DIR = HOME / ".iContext" / "memory"
+MEMORY_FILE = MEMORY_DIR / f"{ROOT.name}.json"
+
+DEFAULT_CONFIG = {
+    "ignore_dirs": [
+        ".git", "__pycache__", ".venv", "venv", "node_modules",
+        ".pnpm", "dist", "build", ".next", ".cache", ".vscode",
+        ".idea", "coverage", ".pytest_cache", ".mypy_cache",
+        ".tox", ".eggs", "logs", "tmp", "temp", "output",
+        "museum", "MagicVideos", "Hypnotic-Shorts",
+        ".cargo", "target", "vendor", "bower_components",
+        "jspm_packages", "Library", "Pods", "Carthage",
+        "Checkouts", ".bundle", "vendor/bundle"
+    ],
+    "ignore_files": [
+        ".bak", ".backup", ".broken", ".disabled", ".log",
+        ".tmp", ".swp", ".pyc", ".pyo", ".pyd", ".so", ".dll"
+    ],
+    "max_file_size": 100000,
+    "recent_hours": 72,
+    "recent_files": 15
+}
+
+TEXT_EXT = {
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".rs", ".go", ".java",
+    ".c", ".cpp", ".h", ".md", ".txt", ".yaml", ".yml", ".json", ".toml", ".sh"
+}
+
+
+class IContextEngine:
+    def __init__(self):
+        self.setup_config()
+        self.load_config()
+
+    def setup_config(self):
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+        if not CONFIG_FILE.exists():
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(DEFAULT_CONFIG, f, indent=2)
+
+    def load_config(self):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                config = json.load(f)
+        except:
+            config = DEFAULT_CONFIG
+        self.IGNORE_DIRS = set(config.get("ignore_dirs", DEFAULT_CONFIG["ignore_dirs"]))
+        self.IGNORE_FILES = tuple(config.get("ignore_files", DEFAULT_CONFIG["ignore_files"]))
+        self.MAX_FILE_SIZE = config.get("max_file_size", DEFAULT_CONFIG["max_file_size"])
+        self.RECENT_HOURS = config.get("recent_hours", DEFAULT_CONFIG["recent_hours"])
+        self.RECENT_FILES = config.get("recent_files", DEFAULT_CONFIG["recent_files"])
+
+    def valid(self, p):
+        try:
+            if any(x in self.IGNORE_DIRS for x in p.parts):
+                return False
+            if p.name.startswith("iContext") or p.name.startswith("compass"):
+                return False
+            if p.name.endswith(self.IGNORE_FILES):
+                return False
+            if p.stat().st_size > self.MAX_FILE_SIZE:
+                return False
+            return True
+        except:
+            return False
+
+    def files(self):
+        result = []
+        try:
+            for p in ROOT.rglob("*"):
+                if p.is_file() and self.valid(p):
+                    result.append(p)
+        except:
+            pass
+        return result
+
+    def rel(self, p):
+        try:
+            return str(p.relative_to(ROOT))
+        except:
+            return str(p)
+
+    def read(self, p, limit=None):
+        try:
+            content = p.read_text(errors="ignore")
+            return content[:limit or self.MAX_FILE_SIZE]
+        except:
+            return ""
+
+    def section(self, title):
+        print()
+        print("━" * 8 + f" {title} " + "━" * 48)
+
+    def print_header(self):
+        print()
+        print("╔" + "═" * 62 + "╗")
+        print("║" + " 🧭 iContext Community ".center(62) + "║")
+        print("╚" + "═" * 62 + "╝")
+
+    def detect_architecture(self, fs):
+        dirs = set()
+        for p in fs:
+            try:
+                parts = p.relative_to(ROOT).parts
+                if len(parts) >= 2:
+                    first = parts[0]
+                    if not first.startswith(".") and not first.startswith("_"):
+                        if (ROOT / first).exists() and len(list((ROOT / first).iterdir())) > 0:
+                            if first not in ["__pycache__", ".git", "venv", "node_modules", ".cargo"]:
+                                dirs.add(first)
+            except:
+                pass
+        return sorted(dirs)[:15]
+
+    def detect_entrypoints(self, fs):
+        entry_names = {
+            "main.py", "app.py", "run.py", "run_verified.py", "run_quick.py",
+            "cli.py", "__main__.py", "index.js", "server.js", "manage.py",
+            "Cargo.toml", "go.mod", "Dockerfile", "docker-compose.yml",
+            "Makefile", "setup.py", "pyproject.toml", "package.json"
+        }
+        found = []
+        for p in fs:
+            if p.name in entry_names:
+                # Priorizar archivos en el directorio raíz sobre dependencias
+                if len(p.relative_to(ROOT).parts) <= 2:
+                    found.insert(0, p)
+                else:
+                    found.append(p)
+        return sorted(found[:10], key=lambda x: len(x.relative_to(ROOT).parts))
+
+    def detect_language(self, fs):
+        exts = {}
+        for p in fs:
+            ext = p.suffix.lower()
+            if ext:
+                exts[ext] = exts.get(ext, 0) + 1
+        if not exts:
+            return "desconocido"
+        return max(exts, key=exts.get)
+
+    def detect_stack(self, fs):
+        stack = []
+        for p in fs:
+            name = p.name.lower()
+            if name == "requirements.txt":
+                stack.append("Python")
+                content = self.read(p).lower()
+                for key, value in [
+                    ("fastapi", "FastAPI"), ("flask", "Flask"), ("django", "Django"),
+                    ("numpy", "NumPy"), ("opencv", "OpenCV"), ("torch", "PyTorch"),
+                    ("tensorflow", "TensorFlow"), ("pydantic", "Pydantic"),
+                    ("sqlalchemy", "SQLAlchemy"), ("celery", "Celery"), ("redis", "Redis")
+                ]:
+                    if key in content:
+                        stack.append(value)
+            elif name == "pyproject.toml":
+                stack.append("Python")
+                content = self.read(p).lower()
+                for key, value in [
+                    ("fastapi", "FastAPI"), ("flask", "Flask"), ("django", "Django"),
+                    ("numpy", "NumPy"), ("opencv", "OpenCV"), ("torch", "PyTorch"),
+                    ("tensorflow", "TensorFlow"), ("pydantic", "Pydantic"),
+                    ("sqlalchemy", "SQLAlchemy"), ("click", "Click")
+                ]:
+                    if key in content:
+                        stack.append(value)
+            elif name == "package.json":
+                stack.append("Node.js")
+                try:
+                    data = json.loads(self.read(p))
+                    deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
+                    for dep in deps:
+                        d = dep.lower()
+                        if "react" in d:
+                            stack.append("React")
+                        elif "vue" in d:
+                            stack.append("Vue")
+                        elif "angular" in d:
+                            stack.append("Angular")
+                        elif "next" in d:
+                            stack.append("Next.js")
+                        elif "express" in d:
+                            stack.append("Express")
+                        elif "nestjs" in d:
+                            stack.append("NestJS")
+                except:
+                    pass
+            elif name == "cargo.toml":
+                stack.append("Rust")
+            elif name == "go.mod":
+                stack.append("Go")
+            elif name == "pom.xml":
+                stack.append("Java/Maven")
+            elif name == "build.gradle":
+                stack.append("Java/Gradle")
+        return list(dict.fromkeys(stack))
+
+    def recent(self, fs, n=None):
+        n = n or self.RECENT_FILES
+        return sorted(fs, key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)[:n]
+
+    def active_files(self, fs):
+        now = datetime.now().timestamp()
+        limit = self.RECENT_HOURS * 3600
+        result = []
+        for p in fs:
+            try:
+                if now - p.stat().st_mtime <= limit:
+                    result.append(p)
+            except:
+                pass
+        return sorted(result, key=lambda p: p.stat().st_mtime, reverse=True)
+
+    def activity_summary(self, fs):
+        if not fs:
+            return None
+        now = datetime.now().timestamp()
+        try:
+            latest = max(fs, key=lambda p: p.stat().st_mtime)
+            latest_ts = latest.stat().st_mtime
+            latest_time = datetime.fromtimestamp(latest_ts)
+            recent_count = sum(1 for p in fs if now - p.stat().st_mtime <= self.RECENT_HOURS * 3600)
+            week_ago = now - (7 * 24 * 3600)
+            week_files = [p for p in fs if p.stat().st_mtime >= week_ago]
+            avg_per_day = len(week_files) / 7
+            age_seconds = max(0, now - latest_ts)
+            if age_seconds < 3600:
+                age = f"{age_seconds / 60:.0f} min"
+            elif age_seconds < 86400:
+                age = f"{age_seconds / 3600:.1f} h"
+            else:
+                age = f"{age_seconds / 86400:.1f} días"
+            return {
+                "latest": latest,
+                "latest_time": latest_time,
+                "recent_count": recent_count,
+                "avg_per_day": round(avg_per_day, 1),
+                "age": age
+            }
+        except:
+            return None
+
+    def git_status(self):
+        try:
+            result = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                lines = [l for l in result.stdout.splitlines() if l.strip()]
+                return len(lines), lines[:10]
+        except:
+            pass
+        return 0, []
+
+    def git_branch(self):
+        try:
+            result = subprocess.run(["git", "branch", "--show-current"], cwd=ROOT, capture_output=True, text=True, timeout=5)
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except:
+            pass
+        return None
+
+    def has_tests(self, fs):
+        test_dirs = {"tests", "test", "__tests__", "spec", "testing"}
+        for p in fs:
+            try:
+                parts = set(p.relative_to(ROOT).parts)
+                if parts & test_dirs:
+                    return True
+                if "test" in p.name.lower() or "spec" in p.name.lower():
+                    return True
+            except:
+                pass
+        return False
+
+    def has_docs(self, fs):
+        for p in fs:
+            try:
+                if "docs" in str(p).lower():
+                    return True
+                if p.name.lower() in {"readme.md", "readme.txt", "contributing.md", "changelog.md"}:
+                    return True
+            except:
+                pass
+        return False
+
+    def readme_content(self, fs):
+        for p in fs:
+            if p.name.lower() == "readme.md":
+                content = self.read(p)
+                lines = [l.strip() for l in content.splitlines() if l.strip() and not l.lstrip().startswith("#")]
+                return " ".join(lines[:5])[:300]
+        return None
+
+    def markers(self, fs):
+        pattern = re.compile(
+            r"(?:"
+            r"siguiente paso|siguiente|pendiente de|pendientes de|"
+            r"falta (?:integrar|conectar|implementar|probar)|"
+            r"bloqueo actual|bloqueo|bloqueado|"
+            r"estado actual|último avance|"
+            r"where.*left|next step|"
+            r"TODO|FIXME|HACK|XXX|"
+            r"por hacer|por implementar|por integrar|por probar|"
+            r"BUG|ISSUE|NEED|WIP|REVIEW|OPTIMIZE|PERFORMANCE|"
+            r"not implemented|pending|missing|incomplete"
+            r")",
+            re.I
+        )
+        result = []
+        for p in fs:
+            if p.suffix.lower() not in TEXT_EXT:
+                continue
+            if p.name.startswith(("fix_", "patch_", "restore_")):
+                continue
+            content = self.read(p)
+            for n, line in enumerate(content.splitlines(), 1):
+                if pattern.search(line):
+                    text = line.strip()
+                    if len(text) > 8:
+                        result.append((p, n, text[:220]))
+        return result[:30]
+
+    def classify_todos(self, marks):
+        critical = []      # 🔴 BLOQUEOS CONFIRMADOS
+        integration = []   # 🟠 INTEGRACIONES PENDIENTES
+        todos = []         # 🟡 PENDIENTES EXPLÍCITOS
+        improvements = []  # 🔵 MEJORAS
+        context = []       # ℹ️ CONTEXTO / MARCADORES
+
+        for p, n, s in marks:
+            lower = s.lower()
+
+            # ─── 1. ¿ES CONTEXTO? ───
+            if re.search(r'^#\s*[A-Z][a-z]+\s+(para|de|del|desde)\s+', s):
+                context.append((p, n, s))
+                continue
+
+            if re.search(r'#\s*(?:Bloqueo|Protección|Seguridad|Validación)\s+para\s+', s):
+                context.append((p, n, s))
+                continue
+
+            if '=' in s and not any(k in lower for k in ['todo', 'fixme', 'error', 'bug']):
+                context.append((p, n, s))
+                continue
+
+            if '"' in s or "'" in s:
+                context.append((p, n, s))
+                continue
+
+            if re.search(r'print\(|console\.log\(', s):
+                context.append((p, n, s))
+                continue
+
+            # ─── 2. ¿ES UN PROBLEMA REAL? ───
+            if 'todo' in lower or 'fixme' in lower:
+                if 'error' in lower or 'bug' in lower:
+                    critical.append((p, n, s))
+                elif 'integrar' in lower or 'conectar' in lower:
+                    integration.append((p, n, s))
+                else:
+                    todos.append((p, n, s))
+                continue
+
+            if 'error' in lower or 'bloqueo' in lower or 'crash' in lower:
+                if 'todo' not in lower and 'fixme' not in lower:
+                    if re.search(r'error\s+en\s+|error\s+al\s+|falla\s+en\s+|falla\s+al\s+', lower):
+                        critical.append((p, n, s))
+                    else:
+                        context.append((p, n, s))
+                continue
+
+            if 'integrar' in lower or 'conectar' in lower or 'connection' in lower:
+                integration.append((p, n, s))
+                continue
+
+            if 'bug' in lower or 'issue' in lower:
+                todos.append((p, n, s))
+                continue
+
+            if 'mejorar' in lower or 'optimizar' in lower or 'refactor' in lower:
+                improvements.append((p, n, s))
+                continue
+
+            if 'pending' in lower or 'missing' in lower or 'incomplete' in lower:
+                todos.append((p, n, s))
+                continue
+
+            context.append((p, n, s))
+
+        return critical, integration, todos, improvements, context
+
+    def infer(self, active, fs, marks):
+        scores = {}
+        for p in active:
+            score = 1
+            path = str(p).lower()
+            if "main" in path or "app" in path or "run" in path:
+                score += 4
+            if "core" in path or "lib" in path or "src" in path or "brain" in path:
+                score += 3
+            if "runtime" in path or "engine" in path or "motor" in path:
+                score += 3
+            if "registry" in path:
+                score += 3
+            if "composer" in path:
+                score += 3
+            if "director" in path:
+                score += 3
+            if "render" in path:
+                score += 3
+            if "learning" in path:
+                score += 3
+            scores[p] = score
+
+        top = sorted(scores, key=scores.get, reverse=True)[:8]
+
+        areas = set()
+        for p in top:
+            path = str(p).lower()
+            if "brain" in path or "core" in path or "lib" in path:
+                areas.add("núcleo / core")
+            if "runtime" in path:
+                areas.add("ejecución / runtime")
+            if "engine" in path or "motor" in path:
+                areas.add("motores")
+            if "registry" in path:
+                areas.add("registro")
+            if "composer" in path:
+                areas.add("composición")
+            if "director" in path:
+                areas.add("dirección")
+            if "render" in path:
+                areas.add("renderizado")
+            if "learning" in path:
+                areas.add("aprendizaje")
+            if "api" in path or "service" in path or "backend" in path:
+                areas.add("api / servicios")
+            if "front" in path or "ui" in path or "view" in path:
+                areas.add("frontend / interfaz")
+            if "test" in path or "spec" in path:
+                areas.add("pruebas / testing")
+            if "doc" in path:
+                areas.add("documentación")
+            if "config" in path:
+                areas.add("configuración")
+
+        if not areas:
+            areas.add("integración general")
+
+        if "núcleo / core" in areas and "api / servicios" in areas:
+            next_step = "Verificar la conexión entre core y servicios."
+        elif "registro" in areas and "ejecución / runtime" in areas:
+            next_step = "Probar la conexión entre registro y ejecución."
+        elif "motores" in areas:
+            next_step = "Probar un motor real dentro del pipeline."
+        elif "aprendizaje" in areas:
+            next_step = "Verificar el sistema de aprendizaje con una ejecución real."
+        elif "pruebas / testing" in areas:
+            next_step = "Ejecutar pruebas y verificar cobertura."
+        elif "documentación" in areas:
+            next_step = "Revisar y actualizar documentación."
+        else:
+            next_step = "Ejecutar una prueba mínima del pipeline completo."
+
+        return areas, top, next_step
+
+    def project_direction(self, areas, critical, integration, todos, improvements, bugs, entries):
+        if critical:
+            return (
+                "Resolver/verificar primero los bloqueos explícitos.",
+                [
+                    "Revisar la evidencia crítica antes de añadir funcionalidad.",
+                    "Reproducir el problema antes de modificar código.",
+                    "Revisar archivos y componentes existentes.",
+                    "No crear arquitectura paralela sin evidencia."
+                ]
+            )
+        if integration:
+            return (
+                "Completar/verificar las integraciones pendientes.",
+                [
+                    "Revisar los puntos de conexión existentes.",
+                    "Comprobar imports, interfaces y flujo real.",
+                    "Verificar que ambos extremos de cada integración funcionen.",
+                    "No sustituir componentes sin evidencia."
+                ]
+            )
+        if entries and ("pruebas / testing" in areas or "ejecución / runtime" in areas):
+            return (
+                "Verificar la ejecución real desde los puntos de entrada.",
+                [
+                    "Ejecutar primero el entrypoint existente.",
+                    "Observar el error o resultado real.",
+                    "Seguir la cadena de ejecución antes de tocar arquitectura."
+                ]
+            )
+        if "motores" in areas or "renderizado" in areas:
+            return (
+                "Verificar y aprovechar los motores existentes.",
+                [
+                    "Revisar primero los motores existentes.",
+                    "Comprobar sus interfaces y conexiones reales.",
+                    "Ejecutar el motor más directamente relacionado con el objetivo.",
+                    "No crear motores nuevos sin evidencia."
+                ]
+            )
+        if todos:
+            return (
+                "Revisar los pendientes explícitos y priorizar.",
+                [
+                    "Comprobar si cada pendiente sigue siendo real.",
+                    "Priorizar por impacto sobre el flujo principal.",
+                    "Revisar primero la implementación existente."
+                ]
+            )
+        if improvements:
+            return (
+                "Mejorar la implementación existente.",
+                [
+                    "Medir o verificar antes de optimizar.",
+                    "Priorizar mejoras con impacto demostrable.",
+                    "Conservar interfaces funcionales existentes."
+                ]
+            )
+        return (
+            "Verificar el flujo principal del proyecto.",
+            [
+                "Seguir los puntos de entrada existentes.",
+                "Revisar primero archivos y componentes existentes.",
+                "Comprobar conexiones reales antes de asumir.",
+                "No crear arquitectura paralela sin evidencia."
+            ]
+        )
+
+    def get_memory(self):
+        try:
+            if MEMORY_FILE.exists():
+                with open(MEMORY_FILE, "r") as f:
+                    return json.load(f)
+        except:
+            pass
+        return None
+
+    def update_memory(self, data):
+        try:
+            MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+            with open(MEMORY_FILE, "w") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except:
+            pass
+
+    def run(self):
+        fs = self.files()
+        active = self.active_files(fs)
+        recent = self.recent(fs)
+
+        arch = self.detect_architecture(fs)
+        entrypoints = self.detect_entrypoints(fs)
+        lang = self.detect_language(fs)
+        stack = self.detect_stack(fs)
+        tests = self.has_tests(fs)
+        docs = self.has_docs(fs)
+        readme = self.readme_content(fs)
+
+        marks = self.markers(fs)
+        critical, integration, todos, improvements, context = self.classify_todos(marks)
+        areas, top, inferred_next = self.infer(active, fs, marks)
+        objective, instructions = self.project_direction(areas, critical, integration, todos, improvements, [], entrypoints)
+
+        git_changes, git_lines = self.git_status()
+        git_branch_name = self.git_branch()
+        activity = self.activity_summary(fs)
+        memory = self.get_memory()
+
+        self.print_header()
+
+        print(f"\n📁 PROYECTO: {ROOT.name}")
+        print(f"📄 ARCHIVOS: {len(fs)}")
+        print(f"🔤 LENGUAJE PRINCIPAL: {lang}")
+
+        if stack:
+            print(f"📦 STACK: {' → '.join(stack)}")
+
+        self.section("ARQUITECTURA")
+        for d in arch[:15]:
+            print(f"  ✓ {d}")
+        if len(arch) > 15:
+            print(f"  ... y {len(arch) - 15} carpetas más")
+
+        if entrypoints:
+            print("\n  🚀 PUNTOS DE ENTRADA:")
+            for p in entrypoints[:8]:
+                print(f"    → {self.rel(p)}")
+
+        if readme:
+            print("\n  📖 README:")
+            print(f"    → {readme}")
+
+        print(f"\n  📚 Documentación: {'✅ Sí' if docs else '❌ No'}")
+        print(f"  🧪 Pruebas: {'✅ Sí' if tests else '❌ No'}")
+
+        if git_branch_name:
+            print(f"\n  🔀 RAMA GIT: {git_branch_name}")
+        if git_changes > 0:
+            print(f"  📝 CAMBIOS SIN COMMIT: {git_changes}")
+            for line in git_lines[:5]:
+                print(f"     {line}")
+
+        self.section("ACTIVIDAD RECIENTE")
+        if activity:
+            print(f"  📅 ÚLTIMA MODIFICACIÓN: {activity['latest_time'].strftime('%Y-%m-%d %H:%M:%S')} (hace {activity['age']})")
+            print(f"  📊 ARCHIVOS MODIFICADOS (últimas {self.RECENT_HOURS}h): {activity['recent_count']}")
+            print(f"  📈 PROMEDIO DE ACTIVIDAD: {activity['avg_per_day']} archivos/día (últimos 7 días)")
+
+        if recent:
+            print("\n  ARCHIVOS MÁS RECIENTES:")
+            for p in recent[:10]:
+                try:
+                    t = datetime.fromtimestamp(p.stat().st_mtime)
+                    print(f"    {t.strftime('%m-%d %H:%M')}  {self.rel(p)}")
+                except:
+                    pass
+        else:
+            print("  ⏳ No hay actividad reciente.")
+
+        self.section("HEBRA DETECTADA")
+        print("  ÁREA ACTIVA:")
+        for a in sorted(areas):
+            print(f"    → {a}")
+
+        if top:
+            print("\n  EVIDENCIA PRINCIPAL:")
+            for p in top[:8]:
+                print(f"    ✓ {self.rel(p)}")
+
+        if marks:
+            print("\n  CONTINUIDAD EXPLÍCITA:")
+            for p, n, s in marks[:8]:
+                print(f"    → {self.rel(p)}:{n} | {s}")
+
+        if critical or integration or todos or improvements or context:
+            self.section("PROBLEMAS / PENDIENTES / CONTEXTO")
+            if critical:
+                print(f"  🔴 BLOQUEOS CONFIRMADOS ({len(critical)}):")
+                for p, n, s in critical[:5]:
+                    print(f"    → {self.rel(p)}:{n} | {s}")
+            if integration:
+                print(f"  🟠 INTEGRACIONES PENDIENTES ({len(integration)}):")
+                for p, n, s in integration[:5]:
+                    print(f"    → {self.rel(p)}:{n} | {s}")
+            if todos:
+                print(f"  🟡 PENDIENTES EXPLÍCITOS ({len(todos)}):")
+                for p, n, s in todos[:5]:
+                    print(f"    → {self.rel(p)}:{n} | {s}")
+            if improvements:
+                print(f"  🔵 MEJORAS ({len(improvements)}):")
+                for p, n, s in improvements[:5]:
+                    print(f"    → {self.rel(p)}:{n} | {s}")
+            if context:
+                print(f"  ℹ️ CONTEXTO / MARCADORES ({len(context)}):")
+                for p, n, s in context[:5]:
+                    print(f"    → {self.rel(p)}:{n} | {s}")
+
+        if memory:
+            self.section("CAMBIO DESDE ÚLTIMA INSPECCIÓN")
+            print(f"  Última inspección: {memory.get('last_inspection', 'desconocida')}")
+            prev_areas = memory.get("areas", [])
+            cur_areas = sorted(list(areas))
+            if prev_areas and sorted(prev_areas) != cur_areas:
+                print(f"  Área cambió: {prev_areas} → {cur_areas}")
+            prev_top = memory.get("top_files", [])
+            cur_top = [self.rel(p) for p in top[:5]]
+            if prev_top and cur_top != prev_top:
+                print("  Archivos activos cambiaron.")
+            prev_count = memory.get("file_count")
+            if prev_count is not None and prev_count != len(fs):
+                print(f"  Cantidad de archivos: {prev_count} → {len(fs)}")
+
+        self.section("RUMBO DEL PROYECTO")
+        print("  OBJETIVO OPERATIVO:")
+        print(f"    → {objective}")
+        print("\n  INSTRUCCIONES PARA CONTINUAR:")
+        for i, instruction in enumerate(instructions, 1):
+            print(f"    {i}. {instruction}")
+
+        self.section("SIGUIENTE ACCIÓN")
+
+        if critical:
+            p, n, s = critical[0]
+            print(f"  → Revisar el primer bloqueo confirmado:")
+            print(f"    {self.rel(p)}:{n}")
+        elif integration:
+            p, n, s = integration[0]
+            print(f"  → Verificar la primera integración pendiente:")
+            print(f"    {self.rel(p)}:{n}")
+        elif entrypoints and ("pruebas / testing" in areas or "ejecución / runtime" in areas):
+            print(f"  → Ejecutar/verificar: {self.rel(entrypoints[0])}")
+        elif todos:
+            p, n, s = todos[0]
+            print(f"  → Revisar el primer pendiente explícito:")
+            print(f"    {self.rel(p)}:{n}")
+        else:
+            print(f"  → {inferred_next}")
+
+        self.update_memory({
+            "last_inspection": datetime.now().isoformat(),
+            "project": ROOT.name,
+            "file_count": len(fs),
+            "areas": sorted(list(areas)),
+            "top_files": [self.rel(p) for p in top[:5]],
+            "active_files": [self.rel(p) for p in active[:10]],
+            "active_count": len(active),
+            "objective": objective
+        })
+
+        print()
+        print("iContext: solo diagnóstico. No modifica proyectos.")
+        print()
+
+
+def main():
+    engine = IContextEngine()
+    engine.run()
+
+
+if __name__ == "__main__":
+    main()
