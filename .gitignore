@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.tmp
+*.log
+.env
+.venv/
+venv/
+.cronos/
+*.bak
+*.backup
+.DS_Store
+data/
+*.db
+*.sqlite
+*.pkl
