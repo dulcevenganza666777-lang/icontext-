@@ -746,3 +746,153 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# ─── DETECCIÓN DE CÓDIGO MUERTO ──────────────────────────────────
+def extract_imports(content):
+    """Extrae imports de un archivo Python"""
+    imports = []
+    lines = content.splitlines()
+    for line in lines:
+        if line.startswith("import ") or line.startswith("from "):
+            imports.append(line)
+    return imports
+
+def detect_dead_code(fs):
+    """Detecta archivos que no son importados por ningún otro"""
+    all_imports = set()
+    for p in fs:
+        if p.suffix in {".py", ".js", ".ts", ".rs", ".go"}:
+            content = read(p)
+            imports = extract_imports(content)
+            all_imports.update(imports)
+
+    dead_files = []
+    for p in fs:
+        if p.name not in all_imports and p.suffix in {".py", ".js", ".ts"}:
+            dead_files.append(p)
+    return dead_files
+
+# ─── SUGERENCIA DE FIXES ────────────────────────────────────────
+def suggest_fixes(dead_files, todos, issues):
+    """Genera sugerencias de fixes basadas en el diagnóstico"""
+    suggestions = []
+    if dead_files:
+        suggestions.append({
+            "type": "dead_code",
+            "message": f"Hay {len(dead_files)} archivos que no son importados por ningún otro.",
+            "action": "Revisa si estos archivos son necesarios o si puedes eliminarlos.",
+            "files": [rel(p) for p in dead_files[:5]]
+        })
+    if len(todos) > 5:
+        suggestions.append({
+            "type": "todos",
+            "message": f"Hay {len(todos)} TODOs y FIXMEs en el código.",
+            "action": "Prioriza los TODOs más antiguos y resuelve los FIXMEs críticos."
+        })
+    if issues:
+        suggestions.append({
+            "type": "integration",
+            "message": f"Hay {len(issues)} integraciones pendientes.",
+            "action": "Conecta las integraciones pendientes antes de agregar nuevas funcionalidades."
+        })
+    return suggestions
+
+# ─── DETECCIÓN DE CÓDIGO MUERTO ──────────────────────────────────
+def extract_imports(content):
+    """Extrae imports de un archivo Python"""
+    imports = []
+    lines = content.splitlines()
+    for line in lines:
+        line = line.strip()
+        if line.startswith("import ") or line.startswith("from "):
+            imports.append(line)
+    return imports
+
+def detect_dead_code(fs):
+    """Detecta archivos que no son importados por ningún otro"""
+    all_imports = set()
+    for p in fs:
+        if p.suffix in {".py", ".js", ".ts", ".rs", ".go"}:
+            content = read(p)
+            imports = extract_imports(content)
+            all_imports.update(imports)
+
+    dead_files = []
+    for p in fs:
+        if p.name not in all_imports and p.suffix in {".py", ".js", ".ts"}:
+            dead_files.append(p)
+    return dead_files
+
+# ─── SUGERENCIA DE FIXES ────────────────────────────────────────
+def suggest_fixes(dead_files, todos, issues):
+    """Genera sugerencias de fixes basadas en el diagnóstico"""
+    suggestions = []
+    if dead_files:
+        suggestions.append({
+            "type": "dead_code",
+            "message": f"Hay {len(dead_files)} archivos que no son importados por ningún otro.",
+            "action": "Revisa si estos archivos son necesarios o si puedes eliminarlos.",
+            "files": [rel(p) for p in dead_files[:5]]
+        })
+    if len(todos) > 5:
+        suggestions.append({
+            "type": "todos",
+            "message": f"Hay {len(todos)} TODOs y FIXMEs en el código.",
+            "action": "Prioriza los TODOs más antiguos y resuelve los FIXMEs críticos."
+        })
+    if issues:
+        suggestions.append({
+            "type": "integration",
+            "message": f"Hay {len(issues)} integraciones pendientes.",
+            "action": "Conecta las integraciones pendientes antes de agregar nuevas funcionalidades."
+        })
+    return suggestions
+
+
+# ─── MEJORA 6: DETECCIÓN DE CÓDIGO MUERTO ──────────────────────────
+def extract_imports(content):
+    """Extrae imports de un archivo Python"""
+    imports = []
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith("import ") or line.startswith("from "):
+            imports.append(line)
+    return imports
+
+def detect_dead_code(fs):
+    """Detecta archivos que no son importados por ningún otro"""
+    all_imports = set()
+    for p in fs:
+        if p.suffix in {".py", ".js", ".ts", ".rs", ".go"}:
+            content = read(p)
+            imports = extract_imports(content)
+            all_imports.update(imports)
+    dead_files = []
+    for p in fs:
+        if p.name not in all_imports and p.suffix in {".py", ".js", ".ts"}:
+            dead_files.append(p)
+    return dead_files
+
+# ─── MEJORA 7: SUGERENCIA DE FIXES ────────────────────────────────
+def suggest_fixes(dead_files, todos, issues):
+    """Genera sugerencias de fixes basadas en el diagnóstico"""
+    suggestions = []
+    if dead_files:
+        suggestions.append({
+            "type": "dead_code",
+            "message": f"⚠️ {len(dead_files)} archivos no son importados",
+            "action": "Revisa si estos archivos son necesarios o si puedes eliminarlos."
+        })
+    if len(todos) > 5:
+        suggestions.append({
+            "type": "todos",
+            "message": f"📝 {len(todos)} TODOs y FIXMEs pendientes",
+            "action": "Prioriza los TODOs más antiguos y resuelve los FIXMEs críticos."
+        })
+    if issues:
+        suggestions.append({
+            "type": "integration",
+            "message": f"🔗 {len(issues)} integraciones pendientes",
+            "action": "Conecta las integraciones pendientes antes de agregar nuevas funcionalidades."
+        })
+    return suggestions
