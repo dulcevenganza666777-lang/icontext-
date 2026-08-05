@@ -28,11 +28,13 @@ DEFAULT_CONFIG = {
         ".tox", ".eggs", "logs", "tmp", "temp", "output",
         "museum", "MagicVideos", "Hypnotic-Shorts",
         ".cargo", "target", "vendor", "bower_components",
+        ".egg-info",
         "jspm_packages", "Library", "Pods", "Carthage",
         "Checkouts", ".bundle", "vendor/bundle"
     ],
     "ignore_files": [
         ".bak", ".backup", ".broken", ".disabled", ".log",
+        ".old", ".orig", ".rej",
         ".tmp", ".swp", ".pyc", ".pyo", ".pyd", ".so", ".dll"
     ],
     "max_file_size": 100000,
@@ -44,6 +46,190 @@ TEXT_EXT = {
     ".py", ".js", ".ts", ".tsx", ".jsx", ".rs", ".go", ".java",
     ".c", ".cpp", ".h", ".md", ".txt", ".yaml", ".yml", ".json", ".toml", ".sh"
 }
+
+
+
+# ─── SELECTOR DE PROYECTOS ─────────────────────────────────────────────
+
+def discover_projects(base=None):
+    """
+    Descubre proyectos locales candidatos.
+
+    Un proyecto se considera candidato cuando contiene al menos uno de:
+    .git, pyproject.toml, package.json, Cargo.toml, go.mod, Makefile,
+    setup.py, README.md.
+    """
+    base = Path(base or Path.home()).expanduser().resolve()
+
+    candidates = []
+
+    if not base.exists() or not base.is_dir():
+        return candidates
+
+    try:
+        children = sorted(
+            base.iterdir(),
+            key=lambda p: p.name.lower()
+        )
+    except OSError:
+        return candidates
+
+    project_markers = {
+        ".git",
+        "pyproject.toml",
+        "package.json",
+        "Cargo.toml",
+        "go.mod",
+        "Makefile",
+        "setup.py",
+        "README.md",
+    }
+
+    for p in children:
+        if not p.is_dir():
+            continue
+
+        if p.name.startswith("."):
+            continue
+
+        # No mostrar artefactos generados, backups ni directorios
+        # internos como proyectos independientes.
+        if (
+            p.name.endswith(".egg-info")
+            or p.name.endswith(".backup")
+            or p.name.endswith(".bak")
+            or p.name.endswith("-backup")
+        ):
+            continue
+
+        try:
+            names = {x.name for x in p.iterdir()}
+        except OSError:
+            continue
+
+        if names & project_markers:
+            candidates.append(p)
+
+    return candidates
+
+
+def choose_project():
+    """
+    Selector interactivo de proyecto.
+
+    Devuelve la ruta seleccionada o None para cancelar.
+    """
+    current = Path.cwd().resolve()
+    home = Path.home().resolve()
+
+    print()
+    print("╔══════════════════════════════════════════════════════════════╗")
+    print("║                    🧭 SELECTOR iContext                     ║")
+    print("╚══════════════════════════════════════════════════════════════╝")
+    print()
+    print(f"📍 Directorio actual: {current}")
+    print(f"🏠 Home:              {home}")
+    print()
+
+    projects = discover_projects(home)
+
+    # El proyecto actual siempre aparece primero si parece ser un proyecto.
+    current_is_project = any(
+        (current / marker).exists()
+        for marker in {
+            ".git",
+            "pyproject.toml",
+            "package.json",
+            "Cargo.toml",
+            "go.mod",
+            "Makefile",
+            "setup.py",
+            "README.md",
+        }
+    )
+
+    if current_is_project:
+        projects = [current] + [
+            p for p in projects if p != current
+        ]
+
+    if not projects:
+        print("No se encontraron proyectos en HOME.")
+        print()
+        print("Se analizará el directorio actual.")
+        return current
+
+    print("PROYECTOS DISPONIBLES")
+    print("──────────────────────────────────────────────────────────────")
+
+    for i, project in enumerate(projects, 1):
+        marker = " ← actual" if project == current else ""
+        print(f"  {i:2}. {project.name:<30} {project}{marker}")
+
+    print()
+    print("  0. Analizar directorio actual")
+    print("  q. Salir")
+    print()
+
+    while True:
+        try:
+            choice = input("Selecciona un proyecto: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return None
+
+        if choice.lower() in {"q", "quit", "exit"}:
+            return None
+
+        if choice == "0":
+            return current
+
+        try:
+            index = int(choice)
+        except ValueError:
+            print("Opción inválida. Introduce un número.")
+            continue
+
+        if 1 <= index <= len(projects):
+            return projects[index - 1]
+
+        print("Opción fuera de rango.")
+
+
+def run_project(project_path):
+    """
+    Ejecuta iContext sobre el proyecto seleccionado.
+
+    El motor original utiliza Path.cwd(), por lo que cambiamos
+    temporalmente el directorio de trabajo para que TODO el análisis
+    corresponda al proyecto elegido.
+    """
+    global ROOT, MEMORY_FILE
+
+    project_path = Path(project_path).expanduser().resolve()
+
+    if not project_path.exists() or not project_path.is_dir():
+        print(f"❌ Proyecto inválido: {project_path}")
+        return
+
+    previous_cwd = Path.cwd()
+
+    try:
+        os.chdir(project_path)
+
+        ROOT = project_path
+        MEMORY_FILE = MEMORY_DIR / f"{ROOT.name}.json"
+
+        print()
+        print(f"📁 PROYECTO SELECCIONADO: {ROOT}")
+        print()
+
+        engine = IContextEngine()
+        engine.run()
+
+    finally:
+        os.chdir(previous_cwd)
+
 
 
 class IContextEngine:
@@ -136,8 +322,8 @@ class IContextEngine:
         entry_names = {
             "main.py", "app.py", "run.py", "run_verified.py", "run_quick.py",
             "cli.py", "__main__.py", "index.js", "server.js", "manage.py",
-            "Cargo.toml", "go.mod", "Dockerfile", "docker-compose.yml",
-            "Makefile", "setup.py", "pyproject.toml", "package.json"
+            "Dockerfile", "docker-compose.yml",
+            "Makefile"
         }
         found = []
         for p in fs:
@@ -150,14 +336,55 @@ class IContextEngine:
         return sorted(found[:10], key=lambda x: len(x.relative_to(ROOT).parts))
 
     def detect_language(self, fs):
-        exts = {}
+        """
+        Detecta el lenguaje principal usando únicamente archivos de código.
+
+        Documentación, configuración y archivos auxiliares no compiten
+        con los lenguajes de programación.
+        """
+        code_extensions = {
+            ".py": "Python",
+            ".js": "JavaScript",
+            ".jsx": "JavaScript",
+            ".ts": "TypeScript",
+            ".tsx": "TypeScript",
+            ".rs": "Rust",
+            ".go": "Go",
+            ".java": "Java",
+            ".c": "C",
+            ".h": "C/C++",
+            ".cpp": "C++",
+            ".cc": "C++",
+            ".cxx": "C++",
+            ".cs": "C#",
+            ".php": "PHP",
+            ".rb": "Ruby",
+            ".swift": "Swift",
+            ".kt": "Kotlin",
+            ".kts": "Kotlin",
+            ".sh": "Shell",
+            ".bash": "Shell",
+            ".zsh": "Shell",
+        }
+
+        counts = {}
+
         for p in fs:
-            ext = p.suffix.lower()
-            if ext:
-                exts[ext] = exts.get(ext, 0) + 1
-        if not exts:
-            return "desconocido"
-        return max(exts, key=exts.get)
+            try:
+                ext = p.suffix.lower()
+            except Exception:
+                continue
+
+            language = code_extensions.get(ext)
+
+            if language:
+                counts[language] = counts.get(language, 0) + 1
+
+        if not counts:
+            return "No detectado"
+
+        return max(counts, key=counts.get)
+
 
     def detect_stack(self, fs):
         stack = []
@@ -342,73 +569,89 @@ class IContextEngine:
         return result[:30]
 
     def classify_todos(self, marks):
-        critical = []      # 🔴 BLOQUEOS CONFIRMADOS
-        integration = []   # 🟠 INTEGRACIONES PENDIENTES
-        todos = []         # 🟡 PENDIENTES EXPLÍCITOS
-        improvements = []  # 🔵 MEJORAS
-        context = []       # ℹ️ CONTEXTO / MARCADORES
+        """
+        Clasifica pendientes reales evitando falsos positivos.
+
+        README, badges, URLs, descripciones y configuración no deben
+        convertirse automáticamente en problemas del proyecto.
+        """
+        critical = []
+        integration = []
+        todos = []
+        improvements = []
+        context = []
 
         for p, n, s in marks:
             lower = s.lower()
+            suffix = p.suffix.lower()
+            name = p.name.lower()
 
-            # ─── 1. ¿ES CONTEXTO? ───
-            if re.search(r'^#\s*[A-Z][a-z]+\s+(para|de|del|desde)\s+', s):
-                context.append((p, n, s))
+            # Documentación/configuración: no clasificar como TODO
+            # salvo que exista un marcador explícito inequívoco.
+            explicit = any(
+                token in lower
+                for token in ("todo", "fixme", "hack", "xxx")
+            )
+
+            if suffix in {".md", ".txt", ".rst"} and not explicit:
                 continue
 
-            if re.search(r'#\s*(?:Bloqueo|Protección|Seguridad|Validación)\s+para\s+', s):
-                context.append((p, n, s))
+            # Badges, URLs y metadata de documentación.
+            if (
+                "img.shields.io" in lower
+                or "github.com/" in lower
+                or "http://" in lower
+                or "https://" in lower
+            ) and not explicit:
                 continue
 
-            if '=' in s and not any(k in lower for k in ['todo', 'fixme', 'error', 'bug']):
-                context.append((p, n, s))
-                continue
-
-            if '"' in s or "'" in s:
-                context.append((p, n, s))
-                continue
-
-            if re.search(r'print\(|console\.log\(', s):
-                context.append((p, n, s))
-                continue
-
-            # ─── 2. ¿ES UN PROBLEMA REAL? ───
-            if 'todo' in lower or 'fixme' in lower:
-                if 'error' in lower or 'bug' in lower:
+            if explicit:
+                if "fixme" in lower or "hack" in lower:
                     critical.append((p, n, s))
-                elif 'integrar' in lower or 'conectar' in lower:
-                    integration.append((p, n, s))
                 else:
                     todos.append((p, n, s))
                 continue
 
-            if 'error' in lower or 'bloqueo' in lower or 'crash' in lower:
-                if 'todo' not in lower and 'fixme' not in lower:
-                    if re.search(r'error\s+en\s+|error\s+al\s+|falla\s+en\s+|falla\s+al\s+', lower):
-                        critical.append((p, n, s))
-                    else:
-                        context.append((p, n, s))
+            if any(
+                token in lower
+                for token in (
+                    "not implemented",
+                    "pending",
+                    "missing",
+                    "incomplete",
+                )
+            ):
+                # No tomar documentación genérica como pendiente.
+                if suffix not in {".md", ".txt", ".rst"}:
+                    todos.append((p, n, s))
                 continue
 
-            if 'integrar' in lower or 'conectar' in lower or 'connection' in lower:
+            if any(
+                token in lower
+                for token in (
+                    "integration pending",
+                    "pending integration",
+                    "integración pendiente",
+                    "integracion pendiente",
+                )
+            ):
                 integration.append((p, n, s))
                 continue
 
-            if 'bug' in lower or 'issue' in lower:
-                todos.append((p, n, s))
-                continue
-
-            if 'mejorar' in lower or 'optimizar' in lower or 'refactor' in lower:
+            if any(
+                token in lower
+                for token in (
+                    "improvement",
+                    "mejora pendiente",
+                )
+            ):
                 improvements.append((p, n, s))
-                continue
-
-            if 'pending' in lower or 'missing' in lower or 'incomplete' in lower:
-                todos.append((p, n, s))
                 continue
 
             context.append((p, n, s))
 
         return critical, integration, todos, improvements, context
+
 
     def infer(self, active, fs, marks):
         scores = {}
@@ -741,8 +984,31 @@ class IContextEngine:
 
 
 def main():
-    engine = IContextEngine()
-    engine.run()
+    import sys
+
+    # Si se pasa una ruta explícita, analizarla directamente.
+    if len(sys.argv) > 1:
+        target = Path(sys.argv[1]).expanduser().resolve()
+
+        if not target.exists():
+            print(f"❌ Proyecto no encontrado: {target}")
+            return
+
+        if not target.is_dir():
+            print(f"❌ La ruta no es un directorio: {target}")
+            return
+
+        run_project(target)
+        return
+
+    # Sin argumentos: abrir selector de proyectos.
+    selected = choose_project()
+
+    if selected is None:
+        print("iContext: operación cancelada.")
+        return
+
+    run_project(selected)
 
 
 if __name__ == "__main__":
