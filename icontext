@@ -986,8 +986,51 @@ class IContextEngine:
 def main():
     import sys
 
-    # Si se pasa una ruta explícita, analizarla directamente.
+    VERSION = "0.1.0"
+
+    # Ayuda
+    if len(sys.argv) > 1 and sys.argv[1] in {"-h", "--help"}:
+        print("""
+iContext — diagnóstico universal de proyectos
+
+USO:
+  ./icontext
+      Abrir el selector interactivo de proyectos.
+
+  ./icontext <directorio>
+      Analizar directamente un proyecto.
+
+  ./icontext .
+      Analizar el directorio actual.
+
+  ./icontext --help
+      Mostrar esta ayuda.
+
+  ./icontext --version
+      Mostrar la versión.
+
+DESCRIPCIÓN:
+  Analiza un repositorio y genera contexto estructurado para
+  asistentes de IA: arquitectura, lenguaje, stack, entrypoints,
+  actividad, Git, pendientes y siguiente acción.
+
+NOTA:
+  iContext es solo diagnóstico. No modifica proyectos.
+""")
+        return
+
+    # Versión
+    if len(sys.argv) > 1 and sys.argv[1] in {"-v", "--version"}:
+        print(f"iContext {VERSION}")
+        return
+
+    # Ruta explícita
     if len(sys.argv) > 1:
+        if len(sys.argv) > 2:
+            print("❌ Solo se acepta un directorio como argumento.")
+            print("   Usa './icontext --help' para ver el uso.")
+            return
+
         target = Path(sys.argv[1]).expanduser().resolve()
 
         if not target.exists():
