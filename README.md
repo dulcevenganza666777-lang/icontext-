@@ -1,6 +1,7 @@
 ```text
 # 🧭 iContext
 
+<<<<<<< HEAD
 **Give AI the context it needs from your codebase — without dumping hundreds of files into the chat.**
 
 iContext is a lightweight, local-first project diagnostic tool that analyzes a codebase and produces a compact context report you can give to an AI coding assistant. Instead of manually explaining a large repository to an AI, run one command and get a structured overview of what is happening inside the project.
@@ -8,11 +9,38 @@ iContext is a lightweight, local-first project diagnostic tool that analyzes a c
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.6+](https://img.shields.io/badge/Python-3.6+-blue.svg)](https://python.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg)](https://github.com/dulcevenganza666777-lang/icontext-)
+=======
+> **Understand your codebase before asking AI to change it.**
+
+iContext is a lightweight, local-first **codebase context and project diagnostic engine**.
+
+It scans a software project and turns repository signals into a compact, structured diagnostic:
+
+- Project structure
+- Source files
+- Main language
+- Technology stack
+- Entry points
+- Documentation
+- Tests
+- Git state
+- Recent development activity
+- Active development areas
+- Explicit pending work
+- Evidence behind detected activity
+- Project direction
+- Recommended next action
+
+The goal is simple:
+
+**Give an AI the map of a codebase before giving it the entire codebase.**
+>>>>>>> c021c94 (Finalize iContext project selector and documentation)
 
 ---
 
 ## Why iContext?
 
+<<<<<<< HEAD
 When an AI assistant needs to work on an existing project, the first problem is often not the code itself. It is **context**.
 
 A repository may contain:
@@ -423,3 +451,23 @@ GitHub:
 https://github.com/dulcevenganza666777-lang/icontext-
 
 ```
+=======
+When working with an AI coding assistant on an existing project, the difficult part is often not writing code.
+
+It is understanding the current state of the repository.
+
+A large project can contain:
+
+```text
+hundreds of files
+multiple subsystems
+old implementations
+new implementations
+generated files
+tests
+configuration
+documentation
+unfinished work
+recent changes
+multiple entry points
+>>>>>>> c021c94 (Finalize iContext project selector and documentation)
