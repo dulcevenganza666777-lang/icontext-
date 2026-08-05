@@ -584,6 +584,7 @@ class IContextEngine:
         readme = self.readme_content(fs)
 
         marks = self.markers(fs)
+        # Clasificación única
         critical, integration, todos, improvements, context = self.classify_todos(marks)
         areas, top, inferred_next = self.infer(active, fs, marks)
         objective, instructions = self.project_direction(areas, critical, integration, todos, improvements, [], entrypoints)
@@ -783,7 +784,7 @@ def suggest_fixes(dead_files, todos, issues):
             "action": "Revisa si estos archivos son necesarios o si puedes eliminarlos.",
             "files": [rel(p) for p in dead_files[:5]]
         })
-    if len(todos) > 5:
+    if len(todos) > 2:
         suggestions.append({
             "type": "todos",
             "message": f"Hay {len(todos)} TODOs y FIXMEs en el código.",
@@ -834,7 +835,7 @@ def suggest_fixes(dead_files, todos, issues):
             "action": "Revisa si estos archivos son necesarios o si puedes eliminarlos.",
             "files": [rel(p) for p in dead_files[:5]]
         })
-    if len(todos) > 5:
+    if len(todos) > 2:
         suggestions.append({
             "type": "todos",
             "message": f"Hay {len(todos)} TODOs y FIXMEs en el código.",
@@ -883,7 +884,7 @@ def suggest_fixes(dead_files, todos, issues):
             "message": f"⚠️ {len(dead_files)} archivos no son importados",
             "action": "Revisa si estos archivos son necesarios o si puedes eliminarlos."
         })
-    if len(todos) > 5:
+    if len(todos) > 2:
         suggestions.append({
             "type": "todos",
             "message": f"📝 {len(todos)} TODOs y FIXMEs pendientes",
@@ -896,3 +897,216 @@ def suggest_fixes(dead_files, todos, issues):
             "action": "Conecta las integraciones pendientes antes de agregar nuevas funcionalidades."
         })
     return suggestions
+
+# ─── GENERADOR DE CÓDIGO ──────────────────────────────────────────
+def generate_fix(dead_files, todos, issues):
+    """Genera código para resolver los problemas detectados"""
+    fixes = []
+    
+    # Si hay código muerto
+    if dead_files:
+        fixes.append(f"""
+# ─── ELIMINAR CÓDIGO MUERTO ──────────────────────────────────────
+# Archivos no importados:
+{chr(10).join([f'#   - {rel(p)}' for p in dead_files[:3]])}
+
+# Comando para eliminar:
+# rm {' '.join([str(p) for p in dead_files[:3]])}
+
+# O si prefieres conservarlos, agrega un import en main.py:
+# from {dead_files[0].stem} import *
+""")
+
+    # Si hay TODOs
+    if len(todos) > 2:
+        fixes.append(f"""
+# ─── RESOLVER TODOS ────────────────────────────────────────────────
+# Hay {len(todos)} TODOs y FIXMEs pendientes.
+# Prioriza los más antiguos:
+
+for todo in sorted(todos, key=lambda x: x[1]):
+    print(f"  → {todo[0]}:{todo[1]} | {todo[2]}")
+
+# Ejemplo de fix para el TODO más antiguo:
+# {todos[0][0]}:{todos[0][1]} → {todos[0][2]}
+""")
+
+    # Si hay integraciones pendientes
+    if issues:
+        fixes.append(f"""
+# ─── INTEGRACIONES PENDIENTES ────────────────────────────────────
+# {len(issues)} integraciones pendientes:
+{chr(10).join([f'#   → {i[0]}:{i[1]} | {i[2]}' for i in issues[:3]])}
+
+# Código base para integrar:
+# from services.youtube_analytics import YouTubeAnalyticsService
+# analytics = YouTubeAnalyticsService()
+# data = analytics.get_metrics()
+""")
+
+    return "\n".join(fixes)
+
+# ─── GENERADOR DE CÓDIGO ──────────────────────────────────────────
+def generate_fix(dead_files, todos, issues):
+    """Genera código para resolver los problemas detectados"""
+    fixes = []
+    
+    if dead_files:
+        fixes.append(f"""
+# ─── ELIMINAR CÓDIGO MUERTO ──────────────────────────────────────
+# Archivos no importados:
+{chr(10).join([f'#   - {rel(p)}' for p in dead_files[:3]])}
+
+# Comando para eliminar:
+# rm {' '.join([str(p) for p in dead_files[:3]])}
+""")
+
+    if len(todos) > 2:
+        fixes.append(f"""
+# ─── RESOLVER TODOS ────────────────────────────────────────────────
+# Hay {len(todos)} TODOs y FIXMEs pendientes.
+
+# Prioriza los más antiguos:
+for todo in sorted(todos, key=lambda x: x[1]):
+    print(f"  → {todo[0]}:{todo[1]} | {todo[2][:50]}...")
+
+# Ejemplo de fix para el TODO más antiguo:
+# {todos[0][0]}:{todos[0][1]} → {todos[0][2][:80]}...
+""")
+
+    if issues:
+        fixes.append(f"""
+# ─── INTEGRACIONES PENDIENTES ────────────────────────────────────
+# {len(issues)} integraciones pendientes:
+{chr(10).join([f'#   → {i[0]}:{i[1]} | {i[2][:60]}...' for i in issues[:3]])}
+
+# Código base para integrar:
+# from services.youtube_analytics import YouTubeAnalyticsService
+# analytics = YouTubeAnalyticsService()
+# data = analytics.get_metrics()
+""")
+
+    return "\n".join(fixes)
+
+# ─── VERSIÓN MEJORADA DE GENERATE_FIX ─────────────────────────────
+
+# ─── GENERADOR DE CÓDIGO (VERSIÓN SIMPLE) ──────────────────────────
+def generate_fix_enhanced(fs, dead_files, todos, issues, arch):
+    """Genera código para resolver problemas o mejorar el proyecto"""
+    fixes = []
+    
+    # 1. Siempre sugerir resolver TODOs (si hay)
+    if len(todos) > 0:
+        fixes.append(f"# ─── TODOS PENDIENTES: {len(todos)} ──────────────────────────────")
+        fixes.append("# Prioriza los más antiguos o críticos:")
+        for todo in todos[:5]:
+            fixes.append(f"#   → {todo[0]}:{todo[1]} | {todo[2][:60]}...")
+        fixes.append("")
+    
+    # 2. Siempre sugerir revisar integraciones (si hay)
+    if issues:
+        fixes.append(f"# ─── INTEGRACIONES PENDIENTES: {len(issues)} ──────────────────────")
+        fixes.append("# Revisa estos archivos:")
+        for issue in issues[:3]:
+            fixes.append(f"#   → {issue[0]}:{issue[1]} | {issue[2][:60]}...")
+        fixes.append("")
+    
+    # 3. Siempre sugerir mejorar pruebas si faltan
+    if not has_tests(fs):
+        fixes.append("# ─── PRUEBAS FALTANTES ──────────────────────────────────────────────")
+        fixes.append("# Crea una carpeta tests/ y agrega pruebas básicas:")
+        fixes.append("mkdir -p tests")
+        fixes.append("cat > tests/test_main.py << 'EOF'")
+        fixes.append("import unittest")
+        fixes.append("class TestMain(unittest.TestCase):")
+        fixes.append("    def test_example(self):")
+        fixes.append("        self.assertTrue(True)")
+        fixes.append("if __name__ == '__main__':")
+        fixes.append("    unittest.main()")
+        fixes.append("EOF")
+        fixes.append("")
+    
+    # 4. Siempre sugerir documentar si falta
+    if not has_docs(fs):
+        fixes.append("# ─── DOCUMENTACIÓN FALTANTE ──────────────────────────────────────────")
+        fixes.append("# Crea un README.md con:")
+        fixes.append("cat > README.md << 'EOF'")
+        fixes.append("# Proyecto")
+        fixes.append("Descripción del proyecto.")
+        fixes.append("EOF")
+        fixes.append("")
+    
+    # 5. Si no hay nada que sugerir, decir que está bien
+    if not fixes:
+        fixes.append("# ✅ No se detectaron problemas urgentes.")
+        fixes.append("# Sugerencia: revisa la documentación y optimiza imports.")
+    
+    return "\n".join(fixes)
+
+# ─── MODO COMPACTO PARA IA ──────────────────────────────────────────
+def print_compact(fs, arch, entrypoints, lang, stack, tests, docs, readme, active, rec, marks, top, git_changes, git_branch_name, activity):
+    """Imprime una salida compacta para modelos de IA"""
+    print(f"Proyecto: {ROOT.name}")
+    print(f"Archivos: {len(fs)}")
+    print(f"Lenguaje: {lang}")
+    print(f"Stack: {' → '.join(stack) if stack else 'No detectado'}")
+    print(f"Arquitectura: {', '.join(arch[:10])}")
+    print(f"Puntos de entrada: {', '.join([rel(p) for p in entrypoints[:3]])}")
+    print(f"Última modificación: {activity['latest_time'].strftime('%Y-%m-%d %H:%M:%S') if activity else 'No'}")
+    print(f"TODOs: {len(marks)}")
+    print(f"Git: {git_branch_name} ({git_changes} cambios)")
+    print(f"Siguiente acción: {next_step if 'next_step' in locals() else 'No definido'}")
+
+# ─── DETECCIÓN DE CAMBIOS REALES ──────────────────────────────────
+def detect_real_changes(fs, memory):
+    """Detecta cambios reales desde la última inspección"""
+    if not memory:
+        return {"new": [], "modified": [], "deleted": [], "total": 0}
+    
+    prev_files = set(memory.get("files", []))
+    current_files = set([rel(p) for p in fs])
+    
+    new_files = current_files - prev_files
+    deleted_files = prev_files - current_files
+    
+    # Archivos modificados (existen en ambos pero con timestamp diferente)
+    modified_files = []
+    prev_timestamps = memory.get("timestamps", {})
+    for p in fs:
+        r = rel(p)
+        if r in prev_timestamps:
+            if p.stat().st_mtime > prev_timestamps[r]:
+                modified_files.append(r)
+    
+    return {
+        "new": list(new_files)[:5],
+        "modified": modified_files[:5],
+        "deleted": list(deleted_files)[:5],
+        "total": len(new_files) + len(modified_files) + len(deleted_files)
+    }
+
+# ─── PRIORIDAD DE ACCIÓN ──────────────────────────────────────────
+def get_action_priority(todo, context):
+    """Determina la prioridad de una acción basada en contexto"""
+    # Prioridad ALTA: archivos en área activa
+    if any(area in context for area in ["core", "motor", "registro"]):
+        return "🔴 ALTA"
+    # Prioridad MEDIA: archivos con cambios recientes
+    if "recent" in context:
+        return "🟡 MEDIA"
+    # Prioridad BAJA: archivos documentales
+    if "docs" in context or "README" in str(todo[0]):
+        return "🟢 BAJA"
+    return "🟡 MEDIA"
+
+# ─── SALIDA PARA IA ──────────────────────────────────────────────
+def print_ai(fs, arch, entrypoints, lang, stack, tests, docs, readme, active, rec, marks, top, git_changes, git_branch_name, activity, next_step):
+    """Imprime una salida optimizada para modelos de IA"""
+    print(f"PROJECT: {ROOT.name}")
+    print(f"LANGUAGE: {lang}")
+    print(f"ACTIVE_AREA: {', '.join(areas) if 'areas' in locals() else 'No detectado'}")
+    print(f"RECENT: {', '.join([rel(p) for p in rec[:3]])}")
+    print(f"PENDING: {len(marks)} TODOs")
+    print(f"NEXT: {next_step}")
+    print(f"ACTION: Verificar primera integración pendiente")
+    print(f"CONSTRAINT: diagnostic_only")
