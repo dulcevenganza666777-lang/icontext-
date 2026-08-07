@@ -1,23 +1,3 @@
-![iContext Logo](Screenshot_20260806-191158.png)
-
-
-<p align="center">
-</p>
-
----
-
-
-<p align="center">
-  <img src="docs/assets/icontext-logo.png" alt="iContext Logo" width="200"/>
-</p>
-
-<h1 align="center">iContext</h1>
-
-<p align="center">
-  <strong>Give AI the map, not the whole forest.</strong>
-</p>
-
-<p align="center">
   <a href="#install">Install</a> ·
   <a href="#usage">Usage</a> ·
   <a href="#examples">Examples</a> ·
