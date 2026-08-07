@@ -1,4 +1,9 @@
-![iContext Logo](Screenshot_20260806-191158.png)
+<p align="center">
+  <img src="Screenshot_20260806-191158.png" alt="iContext Logo" width="100%">
+</p>
+
+---
+
 
 <p align="center">
   <img src="docs/assets/icontext-logo.png" alt="iContext Logo" width="200"/>
