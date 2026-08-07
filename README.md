@@ -1,4 +1,24 @@
+<p align="center">
+  <img src="docs/assets/icontext-logo.png" alt="iContext Logo" width="200"/>
+</p>
 
+<h1 align="center">iContext</h1>
+
+<p align="center">
+  <strong>Give AI the map, not the whole forest.</strong>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#examples">Examples</a> ·
+  <a href="#contribute">Contribute</a>
+</p>
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.6+](https://img.shields.io/badge/Python-3.6+-blue.svg)](https://python.org)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![GitHub stars](https://img.shields.io/github/stars/dulcevenganza666777-lang/iContext)](https://github.com/dulcevenganza666777-lang/iContext/stargazers)
 ```text
 # 🧭 iContext
 
