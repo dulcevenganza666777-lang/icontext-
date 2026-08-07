@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/icontext-logo.png" alt="iContext Logo" width="100%">
+</p>
+
 
   <a href="#install">Install</a> ·
   <a href="#usage">Usage</a> ·
