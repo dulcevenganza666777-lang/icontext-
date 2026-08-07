@@ -1,12 +1,3 @@
-<p align="center">
-  <img src="docs/assets/icontext-logo.png" alt="iContext Logo" width="180"/>
-</p>
-
-<h1 align="center">iContext</h1>
-
-<p align="center">
-  <strong>Give AI the map, not the whole forest.</strong>
-</p>
 
 ```text
 # 🧭 iContext
