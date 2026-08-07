@@ -1,5 +1,10 @@
 <p align="center">
-  <img src="docs/assets/icontext-logo.png" alt="iContext Logo" width="100%">
+  <img src="1786065051232.png" alt="iContext Logo" width="100%">
+</p>
+
+---
+
+<p align="center">
 </p>
 
 
