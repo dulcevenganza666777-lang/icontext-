@@ -1,3 +1,5 @@
+![iContext Logo](Screenshot_20260806-191158.png)
+
 <p align="center">
   <img src="Screenshot_20260806-191158.png" alt="iContext Logo" width="100%">
 </p>
@@ -240,7 +242,6 @@ Instead of immediately dumping a large repository into the conversation:
 ```text
 Large project
      ↓
-  iContext
      ↓
 Compact diagnostic
      ↓
