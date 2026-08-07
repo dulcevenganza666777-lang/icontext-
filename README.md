@@ -1,7 +1,6 @@
 ![iContext Logo](Screenshot_20260806-191158.png)
 
 <p align="center">
-  <img src="Screenshot_20260806-191158.png" alt="iContext Logo" width="100%">
 </p>
 
 ---
